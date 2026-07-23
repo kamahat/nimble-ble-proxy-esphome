@@ -311,8 +311,14 @@ uint8_t in_use_addresses(uint64_t *out, uint8_t cap) {
 }
 
 void disconnect_all() {
-  for (auto &s : g_slots) {
-    if (s.state != State::Free) disconnect(s.address);
+  // Snapshot under the mutex before touching anything: the NimBLE host task
+  // mutates slot state from its own callbacks, so walking g_slots unlocked
+  // races with it and can hand a stale (or already reassigned) address to
+  // disconnect(). in_use_addresses() already does the locked walk.
+  uint64_t addresses[proxy::MAX_CONNECTIONS];
+  uint8_t n = in_use_addresses(addresses, proxy::MAX_CONNECTIONS);
+  for (uint8_t i = 0; i < n; ++i) {
+    disconnect(addresses[i]);
   }
 }
 
