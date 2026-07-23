@@ -280,7 +280,31 @@ bool handle_get_services(const uint8_t *payload, size_t payload_len) {
   return true;
 }
 
+// Make sure the client's attribute table is populated before resolving a
+// handle against it.
+//
+// connection::connect() passes deleteAttributes=true, so the table starts
+// empty on every connect and is only filled when HA sends an explicit
+// GetServices request. HA skips that request whenever it already holds a
+// cached copy of the services — which it does as soon as we advertise
+// REMOTE_CACHING (bit 2, required by modern aioesphomeapi to issue connects
+// at all). So by the time a read/write/notify arrives, the table can
+// legitimately be empty and every handle lookup below would miss.
+//
+// Discovering here costs one attribute walk on the first GATT operation of a
+// connection, and nothing on subsequent ones. Only an *empty* table triggers
+// it: an unknown handle against a populated table still fails fast, without
+// re-walking the peer.
+bool ensure_attributes(NimBLEClient *client) {
+  if (!client->getServices(/*refresh=*/false).empty()) return true;
+  ESP_LOGI(TAG, "attribute table empty — discovering on demand");
+  if (client->discoverAttributes()) return true;
+  ESP_LOGW(TAG, "on-demand attribute discovery failed");
+  return false;
+}
+
 NimBLERemoteCharacteristic *char_at(NimBLEClient *client, uint16_t handle) {
+  if (!ensure_attributes(client)) return nullptr;
   const auto &services = client->getServices(/*refresh=*/false);
   for (auto *svc : services) {
     const auto &chars = svc->getCharacteristics(/*refresh=*/false);
@@ -292,6 +316,7 @@ NimBLERemoteCharacteristic *char_at(NimBLEClient *client, uint16_t handle) {
 }
 
 NimBLERemoteDescriptor *desc_at(NimBLEClient *client, uint16_t handle) {
+  if (!ensure_attributes(client)) return nullptr;
   const auto &services = client->getServices(/*refresh=*/false);
   for (auto *svc : services) {
     const auto &chars = svc->getCharacteristics(/*refresh=*/false);
