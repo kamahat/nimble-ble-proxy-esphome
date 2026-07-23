@@ -39,7 +39,16 @@ inline constexpr const char *MANUFACTURER = "Custom";
 
 // Reported as DeviceInfoResponse.esphome_version. HA only sanity-checks this,
 // but it should look like a current release so the integration doesn't warn.
-inline constexpr const char *FAKE_ESPHOME_VERSION = "2026.5.0";
+//
+// Keep this at 2026.5.1 or later: below that, Home Assistant's ESPHome
+// integration raises a repair issue asking the user to update the device.
+// 2026.5.1 is where ESPHome moved BLE event delivery off its polled event
+// loop (0-16 ms) onto an immediate path (~12 us). That gate doesn't really
+// describe us either way — we never had that loop, since NimBLE callbacks
+// reach send_async directly from the host task — so reporting 2026.5.1
+// states our actual latency behaviour rather than claiming someone else's
+// improvement.
+inline constexpr const char *FAKE_ESPHOME_VERSION = "2026.5.1";
 
 // aioesphomeapi protocol version we claim to speak. 1.14 is current as of
 // ESPHome 2026.x; bumping just adds optional fields, never breaks framing.
