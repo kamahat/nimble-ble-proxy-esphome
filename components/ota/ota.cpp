@@ -27,12 +27,23 @@ httpd_handle_t g_srv = nullptr;
 QuiesceFn g_quiesce_begin = nullptr;
 QuiesceFn g_quiesce_end = nullptr;
 
+// How long a single httpd_req_recv() waits before reporting a timeout.
+// Also applied to the server in start(); keep the two in step so the
+// stall budget below stays meaningful.
+constexpr int RECV_TIMEOUT_S = 30;
+
 #if CONFIG_NBP_OTA
 // Chunk size for streaming POST body → OTA flash writes. Small enough
 // to keep stack/heap pressure low; large enough to amortize HTTP recv
 // overhead. 4 KiB matches the SPI flash sector size, which is what
 // esp_ota_write internally aligns to.
 constexpr size_t CHUNK = 4096;
+
+// Consecutive recv timeouts tolerated before giving up on a stalled upload
+// (≈ 2 min of complete silence at RECV_TIMEOUT_S each). The radios are
+// quiesced for the whole transfer, so waiting forever takes the device off
+// the air with no way back short of a power cycle.
+constexpr int MAX_RECV_TIMEOUTS = 4;
 
 esp_err_t update_post(httpd_req_t *req) {
   // OTA is a remote firmware-write primitive — surface it prominently in
@@ -88,17 +99,30 @@ esp_err_t update_post(httpd_req_t *req) {
   // is fine since only one OTA can run at a time.
   static uint8_t buf[CHUNK];
   size_t total = 0;
+  int stalled = 0;
   while (true) {
     int n = httpd_req_recv(req, reinterpret_cast<char *>(buf), sizeof(buf));
     if (n == 0) break;  // clean EOF
     if (n < 0) {
-      if (n == HTTPD_SOCK_ERR_TIMEOUT) continue;
+      if (n == HTTPD_SOCK_ERR_TIMEOUT) {
+        if (++stalled > MAX_RECV_TIMEOUTS) {
+          ESP_LOGE(TAG, "upload stalled for %d s @ %u bytes — aborting",
+                   MAX_RECV_TIMEOUTS * RECV_TIMEOUT_S,
+                   static_cast<unsigned>(total));
+          esp_ota_abort(handle);
+          if (g_quiesce_end) g_quiesce_end();
+          httpd_resp_send_err(req, HTTPD_408_REQ_TIMEOUT, "upload stalled");
+          return ESP_FAIL;
+        }
+        continue;
+      }
       ESP_LOGE(TAG, "recv failed: %d", n);
       esp_ota_abort(handle);
       if (g_quiesce_end) g_quiesce_end();
       httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "recv failed");
       return ESP_FAIL;
     }
+    stalled = 0;  // progress made — restart the stall budget
     err = esp_ota_write(handle, buf, n);
     if (err != ESP_OK) {
       ESP_LOGE(TAG, "esp_ota_write @ %u: %s", static_cast<unsigned>(total),
@@ -151,7 +175,7 @@ void start() {
   httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
   cfg.stack_size = 8192;
   // OTA POST can take 30+ seconds over WiFi; bump from the 5s default.
-  cfg.recv_wait_timeout = 30;
+  cfg.recv_wait_timeout = RECV_TIMEOUT_S;
   cfg.send_wait_timeout = 30;
   cfg.lru_purge_enable = true;
   // Default 8 handlers is exactly what we needed for the bring-up set
