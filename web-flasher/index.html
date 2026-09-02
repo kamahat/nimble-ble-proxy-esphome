@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nimble BLE Proxy Web Flasher</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Nimble BLE Proxy</p>
+      <h1>Web flasher</h1>
+      <p>Connect an ESP32, ESP32-S3, ESP32-C3, or ESP32-C6 over USB. The browser detects the chip and flashes the matching pre-built release image.</p>
+    </section>
+
+    <section class="panel">
+      <div class="support" id="support"></div>
+      <div class="actions">
+        <div class="connect-stack">
+          <button id="connectButton" type="button" class="primary">Connect</button>
+          <div class="picker-row">
+            <label>
+              Release
+              <select id="releaseSelect"></select>
+            </label>
+            <label>
+              Image
+              <select id="variantSelect">
+                <option value="ble-on">BLE proxy + WiFi dashboard</option>
+                <option value="ble-off">WiFi dashboard only (BLE disabled)</option>
+              </select>
+            </label>
+          </div>
+          <div class="wifi-row">
+            <label>
+              WiFi SSID
+              <input id="wifiSsid" type="text" autocomplete="wifi ssid" placeholder="optional">
+            </label>
+            <label>
+              WiFi password
+              <input id="wifiPsk" type="password" autocomplete="current-password" placeholder="optional">
+            </label>
+          </div>
+          <label class="softap-toggle">
+            <input id="softApEnabled" type="checkbox" checked>
+            Enable SoftAP repeater after WiFi connects
+          </label>
+          <div class="wifi-row" id="softApFields">
+            <label>
+              SoftAP SSID
+              <input id="softApSsid" type="text" autocomplete="off" placeholder="firmware default">
+            </label>
+            <label>
+              SoftAP password
+              <input id="softApPsk" type="password" autocomplete="new-password" placeholder="firmware default">
+            </label>
+          </div>
+        </div>
+        <div class="flash-stack">
+          <label>
+            Baud rate
+            <select id="baudSelect">
+              <option value="921600" selected>921600</option>
+              <option value="460800">460800</option>
+              <option value="230400">230400</option>
+              <option value="115200">115200</option>
+            </select>
+          </label>
+          <button id="flashButton" type="button" class="success" disabled>Flash</button>
+        </div>
+      </div>
+      <dl class="status-grid">
+        <div>
+          <dt>Detected chip</dt>
+          <dd id="chipStatus">not connected</dd>
+        </div>
+        <div>
+          <dt>Selected binary</dt>
+          <dd id="assetStatus">waiting for release metadata</dd>
+        </div>
+        <div>
+          <dt>Progress</dt>
+          <dd><progress id="progress" max="100" value="0"></progress> <span id="progressText">0%</span></dd>
+        </div>
+      </dl>
+      <pre id="log" aria-live="polite"></pre>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>GitHub releases</h2>
+        <a href="https://github.com/fl4p/nimble-ble-proxy-esphome/releases" target="_blank" rel="noreferrer">Open on GitHub</a>
+      </div>
+      <div id="releases" class="releases">Loading releases…</div>
+    </section>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
